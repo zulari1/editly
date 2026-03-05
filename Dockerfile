@@ -1,68 +1,50 @@
-FROM node:lts-bookworm AS build
+FROM node:20-bookworm
 
-# Install dependencies for building canvas/gl
-RUN apt-get update -y
-
-RUN apt-get -y install \
-    build-essential \
-    libcairo2-dev \
-    libgif-dev \
-    libgl1-mesa-dev \
-    libglew-dev \
-    libglu1-mesa-dev \
-    libjpeg-dev \
-    libpango1.0-dev \
-    librsvg2-dev \
-    libxi-dev \
-    pkg-config \
-    python-is-python3
+# Full dependencies for Editly + headless-gl + FFmpeg on Railway (fixes Xvfb + gl null errors)
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    xvfb \
+    x11-utils \
+    xauth \
+    libgl1-mesa-glx \
+    libgl1-mesa-dri \
+    libgbm1 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
+    libxrandr2 \
+    libxtst6 \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libasound2 \
+    libatspi2.0-0 \
+    libxshmfence1 \
+    libfontconfig1 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libcairo2 \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install node dependencies
-COPY package.json ./
-RUN npm install --no-fund --no-audit
+COPY package*.json ./
+RUN npm install
 
-# Add app source
 COPY . .
 
-# Build TypeScript
-RUN npm run build
+# Make entrypoint executable
+RUN chmod +x entrypoint.sh
 
-# Prune dev dependencies
-RUN npm prune --omit=dev
+ENV DISPLAY=:99
+EXPOSE 3000
 
-# Purge build dependencies
-RUN apt-get --purge autoremove -y \
-    build-essential \
-    libcairo2-dev \
-    libgif-dev \
-    libgl1-mesa-dev \
-    libglew-dev \
-    libglu1-mesa-dev \
-    libjpeg-dev \
-    libpango1.0-dev \
-    librsvg2-dev \
-    libxi-dev \
-    pkg-config \
-    python-is-python3
-
-# Remove Apt cache
-RUN rm -rf /var/lib/apt/lists/* /var/cache/apt/*
-
-# Final stage for app image
-FROM node:lts-bookworm
-
-# Install runtime dependencies
-RUN apt-get update -y \
-  && apt-get -y install ffmpeg dumb-init xvfb libcairo2 libpango1.0 libgif7 librsvg2-2 \
-  && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
-
-WORKDIR /app
-COPY --from=build /app /app
-
-# Ensure `editly` binary available in container
-RUN npm link
-
-ENTRYPOINT ["/usr/bin/dumb-init", "--", "xvfb-run", "--server-args", "-screen 0 1280x1024x24 -ac"]
-CMD [ "editly" ]
+CMD ["./entrypoint.sh"]
